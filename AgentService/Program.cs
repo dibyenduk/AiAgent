@@ -6,6 +6,8 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
 using System.Reflection;
+using System.Text;
+using System.Threading;
 
 var endpoint = new Uri("");
 var deploymentName = "gpt-4.1";
@@ -71,7 +73,7 @@ fileTools.Add(new ApprovalRequiredAIFunction(AIFunctionFactory.Create(DangerousM
 
 var fileToolsAgent = azureClient.GetChatClient(deploymentName).CreateAIAgent(
     instructions: "You are a file system expert. When working with the file system tools, provide the full path of the file or directory.",
-    tools: fileTools);
+   tools: fileTools).AsBuilder().Use(FunctionCallMiddleware).Build();
 
 AgentThread fileToolsThread = fileToolsAgent.GetNewThread();
 
@@ -102,4 +104,24 @@ while(true)
     }
    Console.WriteLine(Environment.NewLine);
    Console.WriteLine(fileToolsResponse);   
+}
+
+async ValueTask<object?> FunctionCallMiddleware(AIAgent callingAgent, FunctionInvocationContext context, Func<FunctionInvocationContext, CancellationToken, ValueTask<object?>> next, CancellationToken cancellationToken)
+{
+    StringBuilder functionCallDetails = new();
+    functionCallDetails.Append($"Tool Call Details: {context.Function.Name}");
+    if(context.Arguments != null && context.Arguments != null)
+    {
+        functionCallDetails.Append(" with parameters: ");
+        if (context.Arguments.Count > 0)
+        {
+            foreach (var arg in context.Arguments)
+            {
+                functionCallDetails.Append($"{arg.Key} = {arg.Value}, ");
+            }            
+        }        
+    }
+
+    Console.WriteLine(functionCallDetails.ToString());
+    return await next(context, cancellationToken);
 }
