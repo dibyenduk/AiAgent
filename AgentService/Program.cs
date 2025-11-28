@@ -1,14 +1,15 @@
-﻿using System.Reflection;
-using AgentService;
+﻿using AgentService;
 using Azure;
 using Azure.AI.OpenAI;
+using Azure.Core;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using OpenAI;
+using System.Reflection;
 
-var endpoint = new Uri("<Uri>");
+var endpoint = new Uri("");
 var deploymentName = "gpt-4.1";
-var apiKey = "<API Token>";
+var apiKey = "";
 
 var azureClient = new AzureOpenAIClient(endpoint, new AzureKeyCredential(apiKey));
 
@@ -59,8 +60,14 @@ var aiAgent = azureClient.GetChatClient(deploymentName).CreateAIAgent();
 // Get all the public methods in FileSystemTools through reflection
 var methods = typeof(FileSystemTools).GetMethods(BindingFlags.Public | BindingFlags.Instance);
 
+var dangerousMethod = DangerousMethods.DoSomethingDangerous;
+
 List<AITool> fileTools = methods
-    .Select(m => AIFunctionFactory.Create(m, new FileSystemTools())).Cast<AITool>().ToList();  
+    .Select(m => AIFunctionFactory.Create(m, new FileSystemTools())).Cast<AITool>().ToList();
+
+#pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+fileTools.Add(new ApprovalRequiredAIFunction(AIFunctionFactory.Create(DangerousMethods.DoSomethingDangerous)));
+#pragma warning restore MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 
 var fileToolsAgent = azureClient.GetChatClient(deploymentName).CreateAIAgent(
     instructions: "You are a file system expert. When working with the file system tools, provide the full path of the file or directory.",
@@ -74,7 +81,25 @@ while(true)
    string? userInput = Console.ReadLine();
    ChatMessage message = new ChatMessage(ChatRole.User, userInput);
    var fileToolsResponse = await fileToolsAgent.RunAsync(message, fileToolsThread);
-   // var userInputsRequest = fileToolsResponse.UserInputRequests.ToList();   
+   
+   var userInputsRequests = fileToolsResponse.UserInputRequests.ToList();   
+   while(userInputsRequests.Count > 0)
+   {
+#pragma warning disable MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+        List<ChatMessage> userInputResponses = userInputsRequests.
+            OfType<FunctionApprovalRequestContent>()
+            .Select(functionApprovalRequestContent => {
+                Console.WriteLine("Agent is requesting approval for the following action:");
+                Console.WriteLine(functionApprovalRequestContent.ToString());
+                Console.Write("Do you approve? (yes/no): ");
+                return new ChatMessage(ChatRole.User, [functionApprovalRequestContent.CreateResponse(Console.ReadLine()?.Equals("Y", StringComparison.OrdinalIgnoreCase) ?? false)]);
+            }).ToList();
+
+#pragma warning restore MEAI001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+        
+        fileToolsResponse = await fileToolsAgent.RunAsync(userInputResponses, fileToolsThread);
+        userInputsRequests = fileToolsResponse.UserInputRequests.ToList();
+    }
    Console.WriteLine(Environment.NewLine);
    Console.WriteLine(fileToolsResponse);   
 }
