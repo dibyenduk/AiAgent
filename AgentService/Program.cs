@@ -17,26 +17,26 @@ var apiKey = "";
 
 var azureClient = new AzureOpenAIClient(endpoint, new AzureKeyCredential(apiKey));
 
-// 1. Simple agent run
-var aiAgent = azureClient.GetChatClient(deploymentName).CreateAIAgent();
+//// 1. Simple agent run
+//var aiAgent = azureClient.GetChatClient(deploymentName).CreateAIAgent();
 
-var response = await aiAgent.RunAsync("What is the capital of France ?");
-Console.WriteLine(Environment.NewLine);
-System.Console.WriteLine(response);
-Console.WriteLine("Input Token: " + response?.Usage?.InputTokenCount + " tokens" + "Output Token: " + response?.Usage?.OutputTokenCount + " tokens");
+//var response = await aiAgent.RunAsync("What is the capital of France ?");
+//Console.WriteLine(Environment.NewLine);
+//System.Console.WriteLine(response);
+//Console.WriteLine("Input Token: " + response?.Usage?.InputTokenCount + " tokens" + "Output Token: " + response?.Usage?.OutputTokenCount + " tokens");
 
-// 2.Streaming agent run
-var updates = new List<AgentRunResponseUpdate>();
-await foreach (AgentRunResponseUpdate update in aiAgent.RunStreamingAsync("How to make soup ?"))
-{
-    updates.Add(update);
-    System.Console.Write(update);
-}
+//// 2.Streaming agent run
+//var updates = new List<AgentRunResponseUpdate>();
+//await foreach (AgentRunResponseUpdate update in aiAgent.RunStreamingAsync("How to make soup ?"))
+//{
+//    updates.Add(update);
+//    System.Console.Write(update);
+//}
 
-Console.WriteLine(Environment.NewLine);
-response = updates.ToAgentRunResponse();
-Console.WriteLine("Input Token count: " + response?.Usage?.InputTokenCount);
-Console.WriteLine("Output Token count: " + response?.Usage?.OutputTokenCount);
+//Console.WriteLine(Environment.NewLine);
+//response = updates.ToAgentRunResponse();
+//Console.WriteLine("Input Token count: " + response?.Usage?.InputTokenCount);
+//Console.WriteLine("Output Token count: " + response?.Usage?.OutputTokenCount);
 
 //// 3.Agent with tools
 //var agent = azureClient.GetChatClient(deploymentName).CreateAIAgent(
@@ -109,35 +109,52 @@ Console.WriteLine("Output Token count: " + response?.Usage?.OutputTokenCount);
 //    Console.WriteLine(fileToolsResponse);
 //}
 
-// 5.Call MCP Tools (Comment above section to run this)
-McpClient mcpClient = await McpClient.CreateAsync(new HttpClientTransport(new HttpClientTransportOptions
+//// 5.Call MCP Tools (Comment above section to run this)
+//McpClient mcpClient = await McpClient.CreateAsync(new HttpClientTransport(new HttpClientTransportOptions
+//{
+//    TransportMode = HttpTransportMode.StreamableHttp,
+//    Endpoint = new Uri("https://api.githubcopilot.com/mcp"),
+//    AdditionalHeaders = new Dictionary<string, string>()
+//      {
+//          {  "Authorization", "" }
+//      }
+//}));
+
+//IList<McpClientTool> tools = await mcpClient.ListToolsAsync();
+
+//AIAgent mcpAgent = azureClient.GetChatClient(deploymentName).CreateAIAgent(
+//instructions: "You are a github expert.",
+//tools: tools.Cast<AITool>().ToList())
+//.AsBuilder().Use(FunctionCallMiddleware).Build();
+
+//AgentThread mcpAgentThread = mcpAgent.GetNewThread();
+
+//while (true)
+//{
+//    Console.Write("> ");
+//    string? mcpUserInput = Console.ReadLine();
+//    ChatMessage mcpMessage = new ChatMessage(ChatRole.User, mcpUserInput);
+//    var mcpResponse = await mcpAgent.RunAsync(mcpMessage, mcpAgentThread);
+//    Console.WriteLine(mcpResponse);
+//}
+
+// 6. Get Structure Output Data from Agent
+
+ChatClientAgent outputAgent = azureClient.GetChatClient(deploymentName)
+                            .CreateAIAgent(instructions: "You are an expert in IMDB Lists");
+
+string question = "Give top 10 movies from IMDB";
+
+AgentRunResponse<MovieResult> outputResponse = await outputAgent.RunAsync<MovieResult>(question);
+
+var movieResult = outputResponse.Result;
+
+Console.WriteLine("Message: " + movieResult.Message);
+Console.WriteLine("Top 10 Movies:");
+foreach (var movie in movieResult.Movies)
 {
-    TransportMode = HttpTransportMode.StreamableHttp,
-    Endpoint = new Uri("https://api.githubcopilot.com/mcp"),
-    AdditionalHeaders = new Dictionary<string, string>()
-      {
-          {  "Authorization", "" }
-      }
-}));
-
-IList<McpClientTool> tools = await mcpClient.ListToolsAsync();
-
-AIAgent mcpAgent = azureClient.GetChatClient(deploymentName).CreateAIAgent(
-instructions: "You are a github expert.",
-tools: tools.Cast<AITool>().ToList())
-.AsBuilder().Use(FunctionCallMiddleware).Build();
-
-AgentThread mcpAgentThread = mcpAgent.GetNewThread();
-
-while (true)
-{
-    Console.Write("> ");
-    string? mcpUserInput = Console.ReadLine();
-    ChatMessage mcpMessage = new ChatMessage(ChatRole.User, mcpUserInput);
-    var mcpResponse = await mcpAgent.RunAsync(mcpMessage, mcpAgentThread);
-    Console.WriteLine(mcpResponse);
+    Console.WriteLine($"- {movie.Title} ({movie.Year})");
 }
-
 
 async ValueTask<object?> FunctionCallMiddleware(AIAgent callingAgent, FunctionInvocationContext context, Func<FunctionInvocationContext, CancellationToken, ValueTask<object?>> next, CancellationToken cancellationToken)
 {
